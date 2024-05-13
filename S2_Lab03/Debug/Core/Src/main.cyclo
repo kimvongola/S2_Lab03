@@ -1,0 +1,6 @@
+../Core/Src/main.c:85:5:main	2
+../Core/Src/main.c:136:6:SystemClock_Config	3
+../Core/Src/main.c:183:13:MX_LPUART1_UART_Init	5
+../Core/Src/main.c:230:13:MX_GPIO_Init	1
+../Core/Src/main.c:299:6:ButtonMatrixRead	3
+../Core/Src/main.c:325:6:Error_Handler	1
