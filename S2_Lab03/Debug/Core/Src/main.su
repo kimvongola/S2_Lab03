@@ -1,6 +1,8 @@
-../Core/Src/main.c:85:5:main	8	static
-../Core/Src/main.c:136:6:SystemClock_Config	88	static
-../Core/Src/main.c:183:13:MX_LPUART1_UART_Init	8	static
-../Core/Src/main.c:230:13:MX_GPIO_Init	48	static
-../Core/Src/main.c:299:6:ButtonMatrixRead	16	static
-../Core/Src/main.c:325:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:92:5:main	8	static
+../Core/Src/main.c:146:6:SystemClock_Config	88	static
+../Core/Src/main.c:193:13:MX_LPUART1_UART_Init	8	static
+../Core/Src/main.c:240:13:MX_GPIO_Init	48	static
+../Core/Src/main.c:305:6:ButtonMatrixRead	16	static
+../Core/Src/main.c:325:6:Numarray	4	static
+../Core/Src/main.c:360:6:sendUART	8	static
+../Core/Src/main.c:418:6:Error_Handler	4	static,ignoring_inline_asm

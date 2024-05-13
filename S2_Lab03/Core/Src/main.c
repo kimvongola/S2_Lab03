@@ -60,6 +60,12 @@ struct _ButMtx_Struct BMX_R[4] = {
 {GPIOB,GPIO_PIN_0},
 {GPIOC,GPIO_PIN_1}
 };
+uint16_t first_num;
+uint16_t second_num;
+uint8_t first_databytes[4];
+uint8_t second_databytes[4];
+char first_element[8];
+char second_element[8];
 
 uint16_t ButtonState = 0;
 /* USER CODE END PV */
@@ -70,7 +76,8 @@ static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void ButtonMatrixRead();
-
+void Numarray();
+void sendUART();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -124,6 +131,9 @@ int main(void)
 	  {
 	  BTMX_TimeStamp = HAL_GetTick() + 25; //next scan in 25 ms
 	  ButtonMatrixRead();
+	  Numarray();
+	  sendUART();
+
 	  }
   }
   /* USER CODE END 3 */
@@ -191,7 +201,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 115200;
+  hlpuart1.Init.BaudRate = 96200;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
@@ -240,9 +250,6 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1|GPIO_PIN_4|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
@@ -258,13 +265,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA0 */
@@ -286,6 +286,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
@@ -316,6 +322,93 @@ uint8_t nextX = (X + 1) % 4;
 HAL_GPIO_WritePin(BMX_R[nextX].Port, BMX_R[nextX].Pin, GPIO_PIN_RESET);
 X = nextX;
 }
+void Numarray()
+	{
+
+
+	                if(ButtonState==2)
+	                {
+//	                	second_element[i]='Rock';
+	                	second_num=1;
+	                }
+	                else if(ButtonState==1)
+	                {
+//	                	first_element='Rock';
+	                	first_num=1;
+	                }
+	                else if(ButtonState==4)
+	                {
+	                	first_num=2;
+//	                    first_element='Paper';
+	                }
+	                else if(ButtonState==8)
+	                {
+//	                	second_element='Paper';
+	                	second_num=2;
+	                }
+	                else if (ButtonState==16)
+	                {
+	                	first_num=3;
+//	                    first_element='Scissors';
+	                }
+	                else if (ButtonState==32)
+	                {
+//	                	second_element='Scissors';
+	                	second_num=3;
+	                }
+	}
+void sendUART()
+{
+		first_databytes[0] = 0x45; // Header byte
+		first_databytes[1] = (uint8_t)(first_num & 0xFF); // Lower byte
+		first_databytes[2] = (uint8_t)((first_num >> 8) & 0xFF); // Upper byte
+		first_databytes[3] = 0x0A;
+		HAL_UART_Transmit(&hlpuart1, first_databytes, sizeof(first_databytes), 10);
+		second_databytes[0] = 0x69; // Header byte
+		second_databytes[1] = (uint8_t)(second_num & 0xFF); // Lower byte
+		second_databytes[2] = (uint8_t)((second_num >> 8) & 0xFF); // Upper byte
+		second_databytes[3] = 0x0A;
+		HAL_UART_Transmit(&hlpuart1, second_databytes, sizeof(second_databytes), 10);
+}
+
+//	                if (size==11){
+//	                	size=11;
+//
+//	                }
+//	                if (ButtonState!=0 && ButtonState!=128 && ButtonState!=2048)
+//	                {
+//	                    state=1;
+//	                }
+//	                if (state==1)
+//	                {
+//	                	if (size<=11){
+//	                    if (ButtonState==0)
+//	                    {
+//	                    ans[size]=numchar;
+//	                    numarray[size]=Numberpad;
+//	                    size++;
+//	                    state=0;
+//	                    }
+//	                	}
+//	                }
+	//            ans[size]=numchar;
+	//            numarray[size]=Numberpad;
+	//            size++;
+
+//	                if (ButtonState==2048)
+//	                {
+//	                    if (wmemcmp(ans,"65340500064")==0)
+//	                    {
+//	                    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,GPIO_PIN_SET);
+//	                    }
+//	                    else if (wmemcmp(ans,"65340500064")!=0 || wmemcmp(numarray, check, sizeof(numarray)!=0))
+//	                    {
+//	                    	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,GPIO_PIN_RESET);
+//	                    }
+//	                }
+
+
+
 /* USER CODE END 4 */
 
 /**
