@@ -31,7 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define EEPROM_ADDR 0b10100000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -40,47 +40,41 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+DMA_HandleTypeDef hdma_i2c1_rx;
+DMA_HandleTypeDef hdma_i2c1_tx;
+
 UART_HandleTypeDef hlpuart1;
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_lpuart1_rx;
 
+SPI_HandleTypeDef hspi3;
+
 /* USER CODE BEGIN PV */
-struct _ButMtx_Struct
-{
-GPIO_TypeDef* Port;
-uint16_t Pin;
-};
-
-struct _ButMtx_Struct BMX_L[2] = {
-{GPIOA,GPIO_PIN_0},
-{GPIOC,GPIO_PIN_0}
-};
-
-struct _ButMtx_Struct BMX_R[4] = {
-{GPIOA,GPIO_PIN_1},
-{GPIOA,GPIO_PIN_4},
-{GPIOB,GPIO_PIN_0},
-{GPIOC,GPIO_PIN_1}
-};
-int16_t ButtonState = 0;
-int16_t first_num;
-int16_t second_num;
-int16_t fight;
 uint8_t databytes[4];
 int8_t Rx[5];
-uint16_t result;
-uint16_t score_count;
-uint8_t i=0;
-uint16_t size=8;
-uint16_t quiz[8]={1,2,4,8,16,32,64,128};
-uint16_t index;
-uint16_t answer=1;
-uint16_t point=0;
-uint16_t point_old=0;
-uint16_t random_quiz;
-uint8_t x=0;
-uint8_t y=0;
-uint16_t High_Score;
+uint16_t Counter=0;
+uint16_t size=255;
+//uint16_t Target;
+int Target;
+int answer[4] = {0 ,0 ,0 ,0};
+
+//uint8_t answer[4] = {0 ,0 ,0 ,0};
+uint8_t read[4];
+uint8_t eepromExampleWriteFlag = 0;
+uint8_t eepromExampleReadFlag = 0;
+uint8_t eepromDataReadBack[1];
+uint16_t state=0;
+uint8_t mem = 0;
+uint8_t stop = 0;
+uint8_t data[4];
+uint16_t Difficulty;
+uint32_t Delay;
+uint16_t Average;
+uint8_t breaker;
+uint16_t Score_check;
+int Final_score=9;
+uint8_t debug = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,6 +83,8 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_LPUART1_UART_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_SPI3_Init(void);
 /* USER CODE BEGIN PFP */
 void ButtonMatrixRead();
 void Numarray();
@@ -136,56 +132,148 @@ int main(void)
   MX_DMA_Init();
   MX_LPUART1_UART_Init();
   MX_USART1_UART_Init();
+  MX_I2C1_Init();
+  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
 
-
+  HAL_Delay(1000);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  static uint32_t BTMX_TimeStamp = 0;
-	  if(HAL_GetTick() > BTMX_TimeStamp)
-	  {
-	  BTMX_TimeStamp = HAL_GetTick() + 25; //next scan in 25 ms
-	  ButtonMatrixRead();
+	  rx_UART();
 	  start_gen();
 	  random_number(size);
-	  Numarray();
-
-	  if(ButtonState==0)
+	  if(Delay != 0)
 	  {
-	  index = random_number(sizeof(quiz) / sizeof(quiz[0]));
-	  random_quiz=quiz[index];
+		  if(breaker==0)
+		  {
+			  Target=random_number(size);
+			  breaker=1;
+		  }
+		  if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET && state==0)
+		  {
+			  state=1;
 
-//	  HAL_Delay(500);
-	  }
-	  if(quiz[index]==answer && x==y)
-	  	  	{
-		  	  	point_old=point;
-	  	  		point+=1;
-	  	  		x=1;
+		  }
 
-	  	  	}
+		  if(state==1)
+		  {
+			  if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET )
+			  {
+				  stop = 1;
+			  }
+			  else
+			  {
+				  if(Counter>255)
+				  {
+					  Counter=0;
+				  }
+				  else
+				  {
+				  Counter+=1;
+				  }
+				  HAL_Delay(Delay);
+			  }
+		  }
+
+		  if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1) == GPIO_PIN_RESET && stop == 1)
+		  {
+			  answer[mem] = (uint16_t)(Counter & 0xFF);
+
+			  if (hi2c1.State == HAL_I2C_STATE_READY)
+			  {
+				HAL_I2C_Mem_Write_IT(&hi2c1, EEPROM_ADDR, 0x2C, I2C_MEMADD_SIZE_16BIT, answer, 4);
+			  }
+
+			  HAL_Delay(50);
+
+			  if (hi2c1.State == HAL_I2C_STATE_READY)
+			  {
+					HAL_I2C_Mem_Read_IT(&hi2c1, EEPROM_ADDR, 0x2c, I2C_MEMADD_SIZE_16BIT,read, 4);
+			  }
+
+			  mem++;
+			  stop = 0;
+			  Counter=0;
+			  state=0;
+		  }
+
+		  if (mem==4)
+		  {
+			  Final_score=0;
+			  for(int i=0;i<4;i++)
+			  {
+				if(answer[i]>=Target)
+				{
+					Final_score += Target/answer[i];
+					debug = 9;
+				}
+				else if(answer[i]<Target)
+				{
+					Final_score += answer[i]/Target;
+					debug = 10;
+				}
+			  }
+
+			  memset(answer,0,sizeof(answer));
+			  if (hi2c1.State == HAL_I2C_STATE_READY)
+			  {
+				HAL_I2C_Mem_Write_IT(&hi2c1, EEPROM_ADDR, 0x2C, I2C_MEMADD_SIZE_16BIT, answer, 4);
+			  }
+			  memset(read,0,sizeof(read));
+			  mem=0;
+		  }
+
+  	  }
 	  sendUART();
-	  answer=0;
 
-
-	  }
-	  rx_UART();
-	  //	  rx_UART();
-	  if(ButtonState==0 && x==1)
-	  {
-	  x=0;
-	  }
-  }
+//	  static uint32_t BTMX_TimeStamp = 0;
+//	  if(HAL_GetTick() > BTMX_TimeStamp)
+//	  {
+//	  BTMX_TimeStamp = HAL_GetTick() + 25; //next scan in 25 ms
+//	  ButtonMatrixRead();
+//	  start_gen();
+//	  random_number(size);
+//	  Numarray();
+//
+//	  if(ButtonState==0)
+//	  {
+//	  index = random_number(sizeof(quiz) / sizeof(quiz[0]));
+//	  random_quiz=quiz[index];
+//
+////	  HAL_Delay(500);
+//	  }
+//	  if(quiz[index]==answer && x==y)
+//	  	  	{
+//		  	  	point_old=point;
+//	  	  		point+=1;
+//	  	  		x=1;
+//
+//	  	  	}
+//	  sendUART();
+//	  answer=0;
+//
+//
+//	  }
+//	  rx_UART();
+//	  //	  rx_UART();
+//	  if(ButtonState==0 && x==1)
+//	  {
+//	  x=0;
+//	  }
+//	  EEPROMReadExample(eepromDataReadBack, 3);
+//  }
   /* USER CODE END 3 */
 }
-
+}
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -230,6 +318,54 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x30A0A7FB;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -328,6 +464,46 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * @brief SPI3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI3_Init(void)
+{
+
+  /* USER CODE BEGIN SPI3_Init 0 */
+
+  /* USER CODE END SPI3_Init 0 */
+
+  /* USER CODE BEGIN SPI3_Init 1 */
+
+  /* USER CODE END SPI3_Init 1 */
+  /* SPI3 parameter configuration*/
+  hspi3.Instance = SPI3;
+  hspi3.Init.Mode = SPI_MODE_MASTER;
+  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi3.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi3.Init.CLKPhase = SPI_PHASE_2EDGE;
+  hspi3.Init.NSS = SPI_NSS_SOFT;
+  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi3.Init.CRCPolynomial = 7;
+  hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi3.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
+  if (HAL_SPI_Init(&hspi3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI3_Init 2 */
+
+  /* USER CODE END SPI3_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -341,6 +517,12 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
 
@@ -360,15 +542,19 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1|GPIO_PIN_4|LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -389,14 +575,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PA0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  /*Configure GPIO pins : PA0 PA1 PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA1 PA4 LD2_Pin */
-  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_4|LD2_Pin;
+  /*Configure GPIO pins : PA4 LD2_Pin */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -409,11 +595,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PA8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pin : PD2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
@@ -424,90 +611,15 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void ButtonMatrixRead(){
-static uint8_t X=0;
-for(int i=0; i<2; i++)
-{
-if(HAL_GPIO_ReadPin(BMX_L[i].Port, BMX_L[i].Pin) == GPIO_PIN_RESET)
-{ //ปุ่มถู�?�?ด
-ButtonState |= 1 << (i + (X * 2));
-}
-else
-{
-ButtonState &= ~(1 << (i + (X * 2)));
-}
-}
-//set currentL to Hi-z (open drain)
-HAL_GPIO_WritePin(BMX_R[X].Port, BMX_R[X].Pin, GPIO_PIN_SET);
-//set nextL to low
-uint8_t nextX = (X + 1) % 4;
-HAL_GPIO_WritePin(BMX_R[nextX].Port, BMX_R[nextX].Pin, GPIO_PIN_RESET);
-X = nextX;
-}
-void Numarray()
-	{
-
-		if(first_num==0 || second_num==0)
-		{
-	                if(ButtonState==2)
-	                {
-//	                	second_element[i]='Rock';
-	                	answer=2;
-//	                	second_num=1;
-	                }
-	                else if(ButtonState==1)
-	                {
-//	                	first_element='Rock';
-	                	answer=1;
-//	                	first_num=1;
-	                }
-	                else if(ButtonState==4)
-	                {
-//	                	first_num=2;
-	                	answer=4;
-//	                    first_element='Paper';
-	                }
-	                else if(ButtonState==8)
-	                {
-//	                	second_element='Paper';
-	                	answer=8;
-//	                	second_num=2;
-	                }
-	                else if (ButtonState==16)
-	                {
-//	                	first_num=3;
-	                	answer=16;
-//	                    first_element='Scissors';
-	                }
-	                else if (ButtonState==32)
-	                {
-//	                	second_element='Scissors';
-//	                	second_num=3;
-	                	answer=32;
-	                }
-	                else if (ButtonState==128)
-	                {
-	                //	                	second_element='Scissors';
-//	                   	second_num=3;
-	                   	answer=128;
-	                }
-	                else if (ButtonState==64)
-	                {
-	                	                //	                	second_element='Scissors';
-//	                	                   	second_num=3;
-	                   	answer=64;
-	                }
-	}
-	}
 void sendUART()
 {
 
 		databytes[0] = 0x45; // Header byte
-		databytes[1] = (uint8_t)(point & 0x00FF); // Lower byte
-		databytes[2] = (uint8_t)((point >> 8) & 0x00FF); // Upper byte
+		databytes[1] = (uint8_t)(Final_score & 0x00FF); // Lower byte
+		databytes[2] = (uint8_t)((Final_score >> 8) & 0x00FF); // Upper byte
 		databytes[3] = 0x0A;
 		HAL_UART_Transmit(&hlpuart1, databytes, sizeof(databytes), 10);
-
+//		Average=0;
 //		HAL_UART_Transmit(&huart1, databytes, sizeof(databytes), 10);
 //		if(i<=2)
 //			{
@@ -523,7 +635,21 @@ void rx_UART()
 {
 	Rx[4] = '\0';
 	HAL_UART_Receive(&hlpuart1, Rx, 5,10);
-		High_Score = (uint16_t)(Rx[2]<< 8) + (uint8_t)(Rx[1]);
+	Difficulty = (uint16_t)(Rx[2]<< 8) + (uint8_t)(Rx[1]);
+
+	switch (Difficulty)
+	{
+	case 1:
+		Delay = 200;
+		break;
+	case 2:
+		Delay = 100;
+		break;
+	case 3:
+		Delay = 5;
+		break;
+	}
+
 //			    z = (RxBuffer[6] & 0x0F) + ((RxBuffer[5] & 0x0F) << 4 );
 //			    z = RxBuffer[5]+RxBuffer[6];
 }
