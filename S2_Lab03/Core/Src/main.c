@@ -42,6 +42,7 @@
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef hlpuart1;
 UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_lpuart1_rx;
 
 /* USER CODE BEGIN PV */
 struct _ButMtx_Struct
@@ -55,28 +56,47 @@ struct _ButMtx_Struct BMX_L[2] = {
 {GPIOC,GPIO_PIN_0}
 };
 
-struct _ButMtx_Struct BMX_R[3] = {
+struct _ButMtx_Struct BMX_R[4] = {
 {GPIOA,GPIO_PIN_1},
 {GPIOA,GPIO_PIN_4},
-{GPIOB,GPIO_PIN_0}
+{GPIOB,GPIO_PIN_0},
+{GPIOC,GPIO_PIN_1}
 };
 int16_t ButtonState = 0;
 int16_t first_num;
 int16_t second_num;
 int16_t fight;
 uint8_t databytes[4];
-uint16_t result=0;
+int8_t Rx[5];
+uint16_t result;
+uint16_t score_count;
+uint8_t i=0;
+uint16_t size=8;
+uint16_t quiz[8]={1,2,4,8,16,32,64,128};
+uint16_t index;
+uint16_t answer=1;
+uint16_t point=0;
+uint16_t point_old=0;
+uint16_t random_quiz;
+uint8_t x=0;
+uint8_t y=0;
+uint16_t High_Score;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_LPUART1_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void ButtonMatrixRead();
 void Numarray();
 void sendUART();
+void rx_UART();
+void start_gen();
+uint16_t random_number(uint16_t array_size);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -113,9 +133,11 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_LPUART1_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
 
   /* USER CODE END 2 */
 
@@ -131,8 +153,34 @@ int main(void)
 	  {
 	  BTMX_TimeStamp = HAL_GetTick() + 25; //next scan in 25 ms
 	  ButtonMatrixRead();
+	  start_gen();
+	  random_number(size);
 	  Numarray();
+
+	  if(ButtonState==0)
+	  {
+	  index = random_number(sizeof(quiz) / sizeof(quiz[0]));
+	  random_quiz=quiz[index];
+
+//	  HAL_Delay(500);
+	  }
+	  if(quiz[index]==answer && x==y)
+	  	  	{
+		  	  	point_old=point;
+	  	  		point+=1;
+	  	  		x=1;
+
+	  	  	}
 	  sendUART();
+	  answer=0;
+
+
+	  }
+	  rx_UART();
+	  //	  rx_UART();
+	  if(ButtonState==0 && x==1)
+	  {
+	  x=0;
 	  }
   }
   /* USER CODE END 3 */
@@ -280,6 +328,23 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMAMUX1_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -297,6 +362,9 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1|GPIO_PIN_4|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
@@ -312,6 +380,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA0 */
@@ -365,76 +440,93 @@ ButtonState &= ~(1 << (i + (X * 2)));
 //set currentL to Hi-z (open drain)
 HAL_GPIO_WritePin(BMX_R[X].Port, BMX_R[X].Pin, GPIO_PIN_SET);
 //set nextL to low
-uint8_t nextX = (X + 1) % 3;
+uint8_t nextX = (X + 1) % 4;
 HAL_GPIO_WritePin(BMX_R[nextX].Port, BMX_R[nextX].Pin, GPIO_PIN_RESET);
 X = nextX;
 }
 void Numarray()
 	{
-//	if(ButtonState==0 && first_num!=0 && second_num!=0)
-//	{
-//	first_num=0;
-//	second_num=0;
-//	}
+
 		if(first_num==0 || second_num==0)
 		{
 	                if(ButtonState==2)
 	                {
 //	                	second_element[i]='Rock';
-	                	second_num=1;
+	                	answer=2;
+//	                	second_num=1;
 	                }
 	                else if(ButtonState==1)
 	                {
 //	                	first_element='Rock';
-	                	first_num=1;
+	                	answer=1;
+//	                	first_num=1;
 	                }
 	                else if(ButtonState==4)
 	                {
-	                	first_num=2;
+//	                	first_num=2;
+	                	answer=4;
 //	                    first_element='Paper';
 	                }
 	                else if(ButtonState==8)
 	                {
 //	                	second_element='Paper';
-	                	second_num=2;
+	                	answer=8;
+//	                	second_num=2;
 	                }
 	                else if (ButtonState==16)
 	                {
-	                	first_num=3;
+//	                	first_num=3;
+	                	answer=16;
 //	                    first_element='Scissors';
 	                }
 	                else if (ButtonState==32)
 	                {
 //	                	second_element='Scissors';
-	                	second_num=3;
+//	                	second_num=3;
+	                	answer=32;
 	                }
-
+	                else if (ButtonState==128)
+	                {
+	                //	                	second_element='Scissors';
+//	                   	second_num=3;
+	                   	answer=128;
+	                }
+	                else if (ButtonState==64)
+	                {
+	                	                //	                	second_element='Scissors';
+//	                	                   	second_num=3;
+	                   	answer=64;
+	                }
 	}
 	}
 void sendUART()
 {
-	fight=first_num-second_num;
-	if(fight<0 || fight==2){
-		result=1;
-	}
-	else if(fight>0 || fight==-2)
-	{
-		result=2;
-	}
-	else if (fight==0)
-	{
-		result=0;
-	}
+
 		databytes[0] = 0x45; // Header byte
-		databytes[1] = (uint8_t)(result & 0x00FF); // Lower byte
-		databytes[2] = (uint8_t)((result >> 8) & 0x00FF); // Upper byte
+		databytes[1] = (uint8_t)(point & 0x00FF); // Lower byte
+		databytes[2] = (uint8_t)((point >> 8) & 0x00FF); // Upper byte
 		databytes[3] = 0x0A;
 		HAL_UART_Transmit(&hlpuart1, databytes, sizeof(databytes), 10);
+
 //		HAL_UART_Transmit(&huart1, databytes, sizeof(databytes), 10);
-
-		HAL_Delay(500);
+//		if(i<=2)
+//			{
+//			i+=1;
+//			}
+//			else if (i>2)
+//			{
+//				i=0;
+//			}
+//		HAL_Delay(500);
 }
-
+void rx_UART()
+{
+	Rx[4] = '\0';
+	HAL_UART_Receive(&hlpuart1, Rx, 5,10);
+		High_Score = (uint16_t)(Rx[2]<< 8) + (uint8_t)(Rx[1]);
+//			    z = (RxBuffer[6] & 0x0F) + ((RxBuffer[5] & 0x0F) << 4 );
+//			    z = RxBuffer[5]+RxBuffer[6];
+}
 //	                if (size==11){
 //	                	size=11;
 //
@@ -470,8 +562,14 @@ void sendUART()
 //	                    	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,GPIO_PIN_RESET);
 //	                    }
 //	                }
-
-
+void start_gen()
+{
+	srand(HAL_GetTick());
+}
+uint16_t random_number(uint16_t array_size)
+{
+    return rand() % array_size;
+}
 
 /* USER CODE END 4 */
 
