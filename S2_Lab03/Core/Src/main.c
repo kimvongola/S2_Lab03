@@ -41,6 +41,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef hlpuart1;
+UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 struct _ButMtx_Struct
@@ -54,26 +55,24 @@ struct _ButMtx_Struct BMX_L[2] = {
 {GPIOC,GPIO_PIN_0}
 };
 
-struct _ButMtx_Struct BMX_R[4] = {
+struct _ButMtx_Struct BMX_R[3] = {
 {GPIOA,GPIO_PIN_1},
 {GPIOA,GPIO_PIN_4},
-{GPIOB,GPIO_PIN_0},
-{GPIOC,GPIO_PIN_1}
+{GPIOB,GPIO_PIN_0}
 };
-uint16_t first_num;
-uint16_t second_num;
-uint8_t first_databytes[4];
-uint8_t second_databytes[4];
-char first_element[8];
-char second_element[8];
-
-uint16_t ButtonState = 0;
+int16_t ButtonState = 0;
+int16_t first_num;
+int16_t second_num;
+int16_t fight;
+uint8_t databytes[4];
+uint16_t result=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void ButtonMatrixRead();
 void Numarray();
@@ -115,6 +114,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_LPUART1_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -133,7 +133,6 @@ int main(void)
 	  ButtonMatrixRead();
 	  Numarray();
 	  sendUART();
-
 	  }
   }
   /* USER CODE END 3 */
@@ -233,6 +232,54 @@ static void MX_LPUART1_UART_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -318,14 +365,19 @@ ButtonState &= ~(1 << (i + (X * 2)));
 //set currentL to Hi-z (open drain)
 HAL_GPIO_WritePin(BMX_R[X].Port, BMX_R[X].Pin, GPIO_PIN_SET);
 //set nextL to low
-uint8_t nextX = (X + 1) % 4;
+uint8_t nextX = (X + 1) % 3;
 HAL_GPIO_WritePin(BMX_R[nextX].Port, BMX_R[nextX].Pin, GPIO_PIN_RESET);
 X = nextX;
 }
 void Numarray()
 	{
-
-
+//	if(ButtonState==0 && first_num!=0 && second_num!=0)
+//	{
+//	first_num=0;
+//	second_num=0;
+//	}
+		if(first_num==0 || second_num==0)
+		{
 	                if(ButtonState==2)
 	                {
 //	                	second_element[i]='Rock';
@@ -356,19 +408,31 @@ void Numarray()
 //	                	second_element='Scissors';
 	                	second_num=3;
 	                }
+
+	}
 	}
 void sendUART()
 {
-		first_databytes[0] = 0x45; // Header byte
-		first_databytes[1] = (uint8_t)(first_num & 0xFF); // Lower byte
-		first_databytes[2] = (uint8_t)((first_num >> 8) & 0xFF); // Upper byte
-		first_databytes[3] = 0x0A;
-		HAL_UART_Transmit(&hlpuart1, first_databytes, sizeof(first_databytes), 10);
-		second_databytes[0] = 0x69; // Header byte
-		second_databytes[1] = (uint8_t)(second_num & 0xFF); // Lower byte
-		second_databytes[2] = (uint8_t)((second_num >> 8) & 0xFF); // Upper byte
-		second_databytes[3] = 0x0A;
-		HAL_UART_Transmit(&hlpuart1, second_databytes, sizeof(second_databytes), 10);
+	fight=first_num-second_num;
+	if(fight<0 || fight==2){
+		result=1;
+	}
+	else if(fight>0 || fight==-2)
+	{
+		result=2;
+	}
+	else if (fight==0)
+	{
+		result=0;
+	}
+		databytes[0] = 0x45; // Header byte
+		databytes[1] = (uint8_t)(result & 0x00FF); // Lower byte
+		databytes[2] = (uint8_t)((result >> 8) & 0x00FF); // Upper byte
+		databytes[3] = 0x0A;
+		HAL_UART_Transmit(&hlpuart1, databytes, sizeof(databytes), 10);
+//		HAL_UART_Transmit(&huart1, databytes, sizeof(databytes), 10);
+
+		HAL_Delay(500);
 }
 
 //	                if (size==11){
